@@ -1,0 +1,143 @@
+rules:
+  - id: int-spsec-bad-pwd-encoder
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      The `StandardPasswordEncoder` is deprecated and its use is highly discouraged since it does not include salting,
+      making it vulnerable to certain bruteforce attacks. Similarly, the `NoOpPasswordEncoder` stores passwords in
+      plaintext, exposing them directly if the database is compromised. There are several other such `PasswordEncoder`
+      implementations that exist entirely for backward compatibility and should not be used.
+      
+      
+      It is recommended to use one of the secure password encoders like `BCrypt`, `Argon2`, `PBKDF2`.
+      These are modern, adaptive and cryptographically secure hashing algorithms. They are designed to be
+      resource-intensive, which slows down brute-force attacks significantly.
+      
+      
+      Salting and Iteration - These algorithms inherently support salting and allow configuration of iterations to
+      increase the time taken to hash passwords, enhancing security against attacks.
+      
+      
+      Future-Proofing - By using `DelegatingPasswordEncoder`, the application can easily transition to even more
+      secure algorithms in the future as best practices evolve.
+    patterns:
+      - pattern-either:
+          - pattern: new StandardPasswordEncoder(...)
+          - pattern: StandardPasswordEncoder.newInstance(...)
+          - pattern: new NoOpPasswordEncoder(...)
+          - pattern: NoOpPasswordEncoder.newInstance(...)
+    metadata:
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-security/reference/servlet/authentication/passwords/password-encoder.html
+        - https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html#authentication-password-storage
+    paths:
+      include:
+        - "*.java"
+  - id: int-spsec-insecure-csrf
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      Disabling CSRF protection for endpoints that handle state-changing operations can lead to client-side attacks.
+      CSRF protections are critical wherever transactions or critical state-changing operations are involved, as they
+      prevent malicious actors from tricking users into performing unintended actions on their behalf. In the current
+      configuration, CSRF protection has been disabled for certain endpoints, as indicated in variable $VAR. This
+      exposes the application to potential exploitation by attackers who can craft malicious requests to manipulate
+      user actions.
+      
+      
+      Endpoint Restrictions - Only specific endpoints, such as login and registration, should be accessible without
+      authentication, reducing the attack surface.
+      
+      
+      CSRF Protection - Ensure that CSRF protection is enabled for all endpoints handling state-changing operations.
+      This includes using secure anti-CSRF tokens and validating them on the server side to prevent unauthorized actions.
+    patterns:
+      - pattern-either:
+          - pattern: $VAR. ... .csrf().disable()
+    metadata:
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html
+    paths:
+      include:
+        - "*.java"
+  - id: int-spsec-insecure-sessfix
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      Session fixation is a vulnerability where an attacker hijacks a victim's session by forcing or reusing a known
+      session ID. Protection against session fixation is critical to ensure that attackers cannot exploit session
+      management to impersonate legitimate users. In the current configuration, session fixation protection has been
+      disabled, as indicated in variable $VAR. This exposes the application to the risk of session hijacking and
+      unauthorized access.
+      
+      
+      Session Fixation Protection - Configuring session management to create a new session upon login is essential to
+      prevent attackers from reusing session IDs. This ensures that any session established before authentication cannot
+      be exploited by an attacker.
+      
+      
+      Concurrent Session Control - Limiting concurrent sessions per user helps protect against session hijacking and
+      ensures account integrity.
+      
+      
+      Endpoint Restrictions - Only specific endpoints, such as login and registration, should be accessible without
+      authentication, reducing the attack surface.
+    patterns:
+      - pattern-either:
+          - pattern: $VAR. ... .sessionFixation().none()
+    metadata:
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-security/reference/servlet/exploits/headers.html
+    paths:
+      include:
+        - "*.java"
+  - id: int-spsec-open-firewall
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      In Spring Security, the DefaultHttpFirewall is a component responsible for
+      filtering HTTP requests to enforce security constraints. It acts as a
+      gatekeeper, inspecting incoming requests and rejecting those that contain
+      potentially dangerous or malformed data. The DefaultHttpFirewall provides
+      a basic level of protection by blocking requests with certain suspicious
+      or invalid characters in the URL, such as double slashes or semicolons,
+      which can be used in path traversal or injection attacks.
+
+      However, the `DefaultHttpFirewall` is considered insecure because it is relatively permissive in what it allows
+      through. It is designed to be compatible with a wide range of applications and use cases, which means it may
+      not block all potentially harmful requests. This permissiveness can leave applications vulnerable to certain
+      types of attacks if they rely solely on the default firewall settings for security.
+
+      In contrast, the `StrictHttpFirewall` is a more secure alternative provided by Spring Security. It enforces
+      stricter validation rules on incoming requests, blocking any requests that contain characters or patterns deemed
+      unsafe. By default, the StrictHttpFirewall rejects requests with semicolons, backslashes and other potentially
+      dangerous characters in the URL. This stricter approach reduces the risk of common web vulnerabilities such as
+      path traversal, HTTP response splitting and other injection attacks.
+
+      Using the `StrictHttpFirewall` is recommended for applications that require a higher level of security and can
+      operate within the constraints of its stricter validation rules. It provides a more robust defense against
+      malicious requests and helps ensure that only well-formed and safe requests are processed by the application.
+    patterns:
+      - pattern: new DefaultHttpFirewall()
+    metadata:
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-security/reference/servlet/exploits/firewall.html
+    paths:
+      include:
+        - "*.java"

@@ -1,0 +1,195 @@
+rules:
+  - id: int-spel-insecure-parse
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      User controlled input is directly fed into the `($CTX_TYPE $CTX).$SINK(...)`
+      method. The entry happens through `($REQ_TYPE $REQ).$SOURCE(...)`. This is a
+      known vulnerability pattern that can lead to many different types of issue
+      including but not limited to RCE. Make sure to sanitize user controlled
+      inputs before evaluating untrusted inputs as Spring Expressions.
+      
+      
+      If we pass user-controlled input data into the `parser.parseExpression("...")` call, an adversary can easily
+      manipulate and inject custom expressions, which can lead to various breaches.
+      
+      
+      When using SpEL, it is important to be cautious about potential security vulnerabilities, such as injection
+      attacks. To mitigate these risks, developers should avoid using user input directly in SpEL expressions and
+      validate any input before evaluating expressions. Additionally, limiting the scope of SpEL expressions to
+      trusted sources can help prevent unauthorized access to sensitive data or system resources.
+    patterns:
+      - pattern-either:
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ... + ($REQ_TYPE $REQ). ... .$SOURCE(...) +
+              ..., ...);
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ($REQ_TYPE $REQ). ... .$SOURCE(...) + ...,
+              ...);
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ... + ($REQ_TYPE $REQ). ... .$SOURCE(...),
+              ...);
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ($REQ_TYPE $REQ). ... .$SOURCE(...), ...);
+      - metavariable-regex:
+          metavariable: $SOURCE
+          regex: ^get[A-Za-z0-1]*$
+      - metavariable-pattern:
+          metavariable: $REQ_TYPE
+          pattern-either:
+            - pattern: HttpServletRequest
+            - pattern: ServletRequest
+            - pattern: ServletRequestWrapper
+            - pattern: HttpServletRequestWrapper
+      - metavariable-pattern:
+          metavariable: $CTX_TYPE
+          pattern-either:
+            - pattern: org.springframework.expression.ExpressionParser
+            - pattern: org.springframework.expression.common.TemplateAwareExpressionParser
+            - pattern: org.springframework.expression.spel.standard.SpelExpressionParser
+      - metavariable-pattern:
+          metavariable: $SINK
+          pattern-either:
+            - pattern: parseExpression
+            - pattern: doParseExpression
+            - pattern: parseRaw
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#expressions
+        - https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html#use-programmatic-authorization
+    paths:
+      include:
+        - "*.java"
+  - id: int-spel-bad-prop-accessor
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      The $CLASS_NAME.getPropertyAccessors() should not return an empty list.
+      Returning an empty list essentially bypasses all authorization and access
+      checks leaving the expression parser vulnerable to attacks. Implement a
+      secure property accessor in the $CLASS_NAME.
+      
+      
+      Sample code with correct property accessor implementation:
+      {code:java}
+      public class SecurePropertyAccessorProvider {
+          // Always return a non-empty list of secure property accessors
+          public List<PropertyAccessor> getPropertyAccessors() {
+              // Use Spring's built-in ReflectivePropertyAccessor or a custom secure implementation
+              return Collections.singletonList(new SecurePropertyAccessor());
+          }
+          // Example of a secure custom property accessor
+          static class SecurePropertyAccessor extends ReflectivePropertyAccessor {
+              @Override
+              public boolean canRead(org.springframework.expression.EvaluationContext context, Object target, String name) {
+                  // Add security checks here (e.g., authorization, field whitelisting)
+                  if (isSensitiveField(name)) {
+                      throw new SecurityException("Access to sensitive field '" + name + "' is not allowed.");
+                  }
+                  return super.canRead(context, target, name);
+              }
+              private boolean isSensitiveField(String fieldName) {
+                  // Example: Restrict access to sensitive fields
+                  return "password".equals(fieldName) || "ssn".equals(fieldName);
+              }
+          }
+      }
+      {code}
+    patterns:
+      - pattern-either:
+          - pattern: |-
+              class $CLASS_NAME extends $BASE_CLASS_NAME {
+                public List<PropertyAccessor> getPropertyAccessors() {
+                  return $ACCESSORS;
+                }
+              }
+          - pattern: |-
+              class $CLASS_NAME extends $BASE_CLASS_NAME {
+                @Override
+                public List<PropertyAccessor> getPropertyAccessors() {
+                  return $ACCESSORS;
+                }
+              }
+      - metavariable-pattern:
+          metavariable: $BASE_CLASS_NAME
+          pattern-either:
+            - pattern: SimpleEvaluationContext
+            - pattern: StandardEvaluationContext
+      - metavariable-pattern:
+          metavariable: $ACCESSORS
+          pattern-either:
+            - pattern: Arrays.asList();
+            - pattern: Collections.emptyList();
+            - pattern: List.of();
+            - pattern: new ArrayList<>();
+            - pattern: new LinkedList<>();
+    metadata:
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#expressions
+        - https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html#use-programmatic-authorization
+        - https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/PropertyAccessor.html
+    paths:
+      include:
+        - "*.java"
+  - id: int-spel-auth-bypass
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      The $CLASS_NAME.canRead() should not return a hardcoded `true`.
+      Returning true always essentially bypasses all authorization and access
+      checks leaving the expression parser vulnerable to attacks. Implement a
+      secure canRead(...) method in the $CLASS_NAME.
+      
+      
+      Sample code with correct property accessor implementation:
+      {code:java}
+      public class SecurePropertyAccessorProvider {
+          // Always return a non-empty list of secure property accessors
+          public List<PropertyAccessor> getPropertyAccessors() {
+              // Use Spring's built-in ReflectivePropertyAccessor or a custom secure implementation
+              return Collections.singletonList(new SecurePropertyAccessor());
+          }
+          // Example of a secure custom property accessor
+          static class SecurePropertyAccessor extends ReflectivePropertyAccessor {
+              @Override
+              public boolean canRead(org.springframework.expression.EvaluationContext context, Object target, String name) {
+                  // Add security checks here (e.g., authorization, field whitelisting)
+                  if (isSensitiveField(name)) {
+                      throw new SecurityException("Access to sensitive field '" + name + "' is not allowed.");
+                  }
+                  return super.canRead(context, target, name);
+              }
+              private boolean isSensitiveField(String fieldName) {
+                  // Example: Restrict access to sensitive fields
+                  return "password".equals(fieldName) || "ssn".equals(fieldName);
+              }
+          }
+      }
+      {code}
+    patterns:
+      - pattern: >
+          public boolean canRead(...) {
+            return true;
+          }
+      - pattern-inside: |
+          class $CLASS_NAME extends ReflectivePropertyAccessor {
+          ...
+          }
+    metadata:
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#expressions
+        - https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html#use-programmatic-authorization
+        - https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/expression/PropertyAccessor.html
+    paths:
+      include:
+        - "*.java"

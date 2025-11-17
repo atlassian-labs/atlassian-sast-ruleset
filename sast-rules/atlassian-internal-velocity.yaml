@@ -1,0 +1,91 @@
+rules:
+  - id: int-velocity-pom-inclusion
+    patterns:
+      - pattern: |
+          <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+            <version>...</version>
+          </dependency>
+      - pattern-not: |
+          <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+            <version>1.6.4-atlassian-...</version>
+          </dependency>
+      - pattern-not: |
+          <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+            <version>2. ...</version>
+          </dependency>
+      - pattern-inside: |
+          <dependencies>
+          ...
+          </dependencies>
+      - pattern-inside: |
+          <dependencyManagement>
+          ...
+          </dependencyManagement>
+      - pattern-not-inside:
+          <plugins>
+          ...
+          </plugins>
+    paths:
+      include:
+        - "*.xml"
+    languages:
+      - generic
+    severity: WARNING
+    message: >-
+      The inclusion of a non-Atlassian version of the Apache Velocity 1.x.x library in the pom.xml file has been
+      identified. This practice is not permitted due to significant security risks. The Atlassian-provided Velocity
+      library incorporates critical security hardening such as an allowlist and a blocklist, which are specifically
+      designed to mitigate vulnerabilities and prevent exploitation. Using an unsupported version of the library
+      bypasses these protections, increasing the risk of security breaches, including injection attacks and
+      unauthorized code execution. The Velocity library supplied by Atlassian must be used to ensure that the
+      application remains secure and adheres to Atlassian's security standards.
+  - id: int-velocity-eng-factory-create
+    message: >
+      Detected call to `VelocityEngineFactory.createVelocityEngine(...)` which does velocity engine instantiation.
+      If there is a custom engine used and or if not used properly, this might lead to RCE or SSTI vulnerabilities.
+    severity: INFO
+    languages:
+      - java
+    pattern-either:
+      - pattern: org.apache.velocity.spring.VelocityEngineFactory.createVelocityEngine(...)
+      - pattern: VelocityEngineFactory.createVelocityEngine(...)
+      - pattern: (org.apache.velocity.spring.VelocityEngineFactory $VE).createVelocityEngine(...)
+  - id: int-velocity-eng-factory-new
+    message: >
+      Detected call to `VelocityEngineFactory.newVelocityEngine(...)` which does velocity engine instantiation.
+      If there is a custom engine used and or if not used properly, this might lead to RCE or SSTI vulnerabilities.
+    severity: INFO
+    languages:
+      - java
+    pattern-either:
+      - pattern: org.apache.velocity.spring.VelocityEngineFactory.newVelocityEngine(...)
+      - pattern: VelocityEngineFactory.newVelocityEngine(...)
+      - pattern: (org.apache.velocity.spring.VelocityEngineFactory $VE).newVelocityEngine(...)
+  - id: int-velocity-eng-factory-set
+    message: >
+      Detected call to `VelocityEngineFactory.setVelocityProperties(...)` which might be insecure if used improperly.
+      Potentially vulnerable if user controlled/insecure properties are used for initialization.
+    severity: INFO
+    languages:
+      - java
+    pattern-either:
+      - pattern: org.apache.velocity.spring.VelocityEngineFactory.setVelocityProperties(...)
+      - pattern: VelocityEngineFactory.setVelocityProperties(...)
+      - pattern: (org.apache.velocity.spring.VelocityEngineFactory $VE).setVelocityProperties(...)
+  - id: int-velocity-eng-factory-setmap
+    message: >
+      Detected call to `VelocityEngineFactory.setVelocityPropertiesMap(...)` which might be insecure if used improperly.
+      Potentially vulnerable if user controlled/insecure properties are used for initialization.
+    severity: INFO
+    languages:
+      - java
+    pattern-either:
+      - pattern: org.apache.velocity.spring.VelocityEngineFactory.setVelocityPropertiesMap(...)
+      - pattern: VelocityEngineFactory.setVelocityPropertiesMap(...)
+      - pattern: (org.apache.velocity.spring.VelocityEngineFactory $VE).setVelocityPropertiesMap(...)

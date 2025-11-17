@@ -1,0 +1,125 @@
+rules:
+  - id: int-jndi-lookup-sink
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      User controlled input is directly fed into the ($CTX_TYPE
+      $CTX).$SINK(...) method. The entry happens through ($REQ_TYPE
+      $REQ).$SOURCE(...). This is a known vulnerability pattern that can lead to
+      many different types of issue including but not limited to RCE. Make sure
+      to sanitize user controlled inputs before feeding into JNDI lookup
+      methods.
+    patterns:
+      - pattern-either:
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ... + ($REQ_TYPE $REQ). ... .$SOURCE(...) +
+              ..., ...);
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ($REQ_TYPE $REQ). ... .$SOURCE(...) + ...,
+              ...);
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ... + ($REQ_TYPE $REQ). ... .$SOURCE(...),
+              ...);
+          - pattern: ($CTX_TYPE $CTX).$SINK(..., ($REQ_TYPE $REQ). ... .$SOURCE(...), ...);
+      - metavariable-regex:
+          metavariable: $SOURCE
+          regex: ^get[A-Za-z0-1]*$
+      - metavariable-pattern:
+          metavariable: $REQ_TYPE
+          pattern-either:
+            - pattern: HttpServletRequest
+            - pattern: ServletRequest
+            - pattern: ServletRequestWrapper
+            - pattern: HttpServletRequestWrapper
+      - metavariable-pattern:
+          metavariable: $CTX_TYPE
+          pattern-either:
+            - pattern: javax.naming.Context
+            - pattern: javax.naming.InitialContext
+            - pattern: javax.naming.directory.DirContext
+            - pattern: javax.naming.event.EventContext
+            - pattern: javax.naming.event.EventDirContext
+            - pattern: javax.naming.ldap.LdapContext
+            - pattern: javax.naming.directory.InitialDirContext
+            - pattern: javax.naming.ldap.InitialLdapContext
+      - metavariable-pattern:
+          metavariable: $SINK
+          pattern-either:
+            - pattern: lookup
+            - pattern: doLookup
+            - pattern: lookupLink
+            - pattern: search
+            - pattern: rename
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html
+        - https://www.veracode.com/blog/research/exploiting-jndi-injections-java
+    paths:
+      include:
+        - "*.java"
+  - id: int-jndi-insecure-serde
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      Object deserialization during JNDI lookup or search is enabled in $TYPE.
+      The ($TYPE $VAR) variable has `ReturningObjFlag` enabled which can lead to
+      deserialization of arbitrary serialized objects and RCE. Make sure to
+      disable object deserialization during search.
+    patterns:
+      - pattern-either:
+          - pattern: new $TYPE(..., ..., ..., ..., $VAL, ...);
+          - pattern: ($TYPE $VAR).setReturningObjFlag($VAL)
+      - metavariable-pattern:
+          metavariable: $TYPE
+          pattern: SearchControls
+      - metavariable-pattern:
+          metavariable: $VAL
+          pattern-either:
+            - pattern: "true"
+            - pattern: Boolean.TRUE
+            - pattern: Boolean.valueOf(...)
+            - pattern: Boolean.parseBoolean(...)
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html
+        - https://www.veracode.com/blog/research/exploiting-jndi-injections-java
+    paths:
+      include:
+        - "*.java"
+  - id: int-jndi-corba-serde
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      Object deserialization using CORBA ORB APIs can lead to RCE. The
+      variable ($TYPE $VAR) deserializes string into objects which is a
+      dangerous pattern. Do not use `string_to_object` or `object_to_string`
+      functions.
+    patterns:
+      - pattern: ($TYPE $VAR).string_to_object(...);
+      - metavariable-pattern:
+          metavariable: $TYPE
+          pattern-either:
+            - pattern: org.omg.CORBA.ORB
+            - pattern: org.omg.CORBA_2_3.ORB
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html
+        - https://www.veracode.com/blog/research/exploiting-jndi-injections-java
+    paths:
+      include:
+        - "*.java"

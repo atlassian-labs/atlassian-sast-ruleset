@@ -1,0 +1,256 @@
+rules:
+  - id: int-xstream-open-perm
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      The use of `AnyTypePermission.ANY` in your code permits the deserialization of any class without restriction.
+      This practice is highly insecure as it opens the door to critical vulnerabilities, including Remote Code
+      Execution (RCE). By allowing arbitrary classes to be deserialized, attackers can potentially inject malicious
+      payloads, execute unauthorized code or exploit your application in other harmful ways. To mitigate these risks,
+      it is strongly recommended to use a more restrictive deserialization policy that explicitly defines and limits
+      the classes that can be deserialized.
+    metadata:
+      category: security
+      cwe: "CWE-937: Improper Access Control"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    pattern-either:
+      - pattern: $XSTREAM.addPermission(AnyTypePermission.ANY);
+      - pattern: AnyTypePermission.ANY
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-bad-blocklist
+    languages: [ java ]
+    severity: WARNING
+    message: >
+      The use of `xstream.denyTypes()` relies on a blocklist approach to restrict certain types. However, blocklists
+      are inherently fragile and can often be bypassed by attackers using creative techniques to introduce malicious
+      or unexpected types. This makes relying solely on denyTypes() an insufficient security measure. It is recommended
+      to adopt a more robust allowlist approach, such as xstream.allowTypes(), which explicitly specifies the types
+      that are permitted, thereby reducing the risk of exploitation and enhancing the overall security of your
+      application.
+    metadata:
+      category: security
+      cwe: "CWE-670: Always-Incomplete Blacklist"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    pattern-either:
+      - pattern: $XSTREAM.denyTypes(...)
+      - pattern: $XSTREAM.denyPermission(...)
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-wildcard-perm
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      The use of `xstream.allowTypesByWildcard()` introduces a security risk by allowing the inclusion of classes based
+      on broad, unchecked patterns. This permissive approach can be exploited by attackers to load malicious or
+      unexpected classes, including potentially dangerous proxies, leading to vulnerabilities such as remote code
+      execution or data manipulation. To ensure safer deserialization practices, it is recommended to adopt stricter
+      controls by explicitly specifying allowed classes or using more secure alternatives.
+    metadata:
+      category: security
+      cwe: "CWE-470: Use of Externally-Controlled Input to Select Classes or Code"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    pattern-sources:
+      - patterns:
+          - pattern: (com.thoughtworks.xstream.XStream $X).allowTypesByWildcard(...)
+          - focus-metavariable: $X
+        by-side-effect: true
+    pattern-sinks:
+      - pattern: (com.thoughtworks.xstream.XStream $X).fromXML(...)
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-bad-custom-converter
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      Using insecure XStream custom converters to handle potentially dangerous types can expose your application to
+      deserialization attacks in `$XSTREAM.registerConverter(...)`. Deserialization attacks occur when untrusted or
+      malicious data is processed during deserialization, allowing attackers to execute arbitrary code, manipulate
+      application behavior or exploit vulnerabilities. Custom converters that are not properly secured may inadvertently
+      process unsafe data types, creating a significant security risk. It is crucial to validate and sanitize input
+      data, restrict the types being deserialized and follow secure coding practices when implementing XStream custom
+      converters to protect your application from such threats.
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    metadata:
+      category: security
+      cwe: "CWE-707: Improper Neutralization"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    pattern-sources:
+      - pattern: new XStream()
+    pattern-sinks:
+      - pattern: $XSTREAM.registerConverter(...)
+    pattern-sanitizers:
+      - patterns:
+          - pattern-either:
+              - pattern: $XSTREAM.allowTypes(...)
+              - pattern: $XSTREAM.denyTypes(...)
+              - pattern: $XSTREAM.addPermission(...)
+          - focus-metavariable: $XSTREAM
+        by-side-effect: true
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-insecure-unmarshal
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      `XStream.unmarshal()` is being used with a custom `HierarchicalStreamReader`, which can introduce potential
+      security risks. Custom implementations of HierarchicalStreamReader may not properly enforce critical XML security
+      measures, such as protection against XML External Entity (XXE) attacks. XXE vulnerabilities can allow attackers
+      to access sensitive data, perform denial-of-service attacks or execute malicious code by exploiting improperly
+      configured XML parsers. To ensure robust security, always validate that custom readers implement sufficient
+      protections or consider using a secure, well-tested alternative.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    patterns:
+      - pattern-inside: |
+          HierarchicalStreamReader $READER = new $CUSTOMREADER(...);
+          ...
+          $XSTREAM.unmarshal($READER);
+      - pattern-not: new XppReader(...)
+      - pattern-not: new DomReader(...)
+      - pattern-not: new StaxReader(...)
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-bad-instantiation
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      XStream is instantiated without security configurations. Use `$X.addPermission(...)`, `$X.allowTypes(...)`,
+      `$X.setupDefaultSecurity(...)` or `$X.allowTypeHierarchy(...)` to restrict the deserialization types.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    pattern-sources:
+      - pattern: new com.thoughtworks.xstream.XStream()
+    pattern-sinks:
+      - pattern: $X.fromXML(...)
+    pattern-sanitizers:
+      - patterns:
+          - pattern-either:
+              - pattern: $X.addPermission(...)
+              - pattern: $X.allowTypes(...)
+              - pattern: $X.setupDefaultSecurity(...)
+              - pattern: $X.allowTypeHierarchy(...)
+          - focus-metavariable: $X
+        by-side-effect: true
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-cglibproxy-perm
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      `CGLIBProxyTypePermission.PROXIES` is being added, which allows deserialization of CGLIB-generated proxy objects.
+      This can lead to arbitrary code execution if an attacker crafts a malicious payload.
+      
+      
+      Recommendation: Remove `CGLIBProxyTypePermission.PROXIES` permission, use XStream's `SecurityFramework` with explicit type
+      allowlisting and implement custom converters for required classes. Consider alternatives like JSON for data
+      serialization if possible.
+      
+      
+      If CGLIB proxies are absolutely necessary: Implement strict input validation and use `SecurityFramework` with
+      `NoTypePermission.NONE` as base. Add only specifically required permissions and enable XStream's `SecurityFramework`.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    patterns:
+      - pattern-either:
+          - pattern: $XSTREAM.addPermission(CGLIBProxyTypePermission.PROXIES)
+          - pattern: $XSTREAM.allowTypes(CGLIBProxyTypePermission.PROXIES)
+    paths:
+      include:
+        - "*.java"
+  - id: int-xstream-proxy-type-perm
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      The usage of `ProxyTypePermission.PROXIES` allows dynamic proxy types, which can lead to 
+      security vulnerabilities such as unauthorized code execution or access to sensitive objects.
+      
+      
+      Recommendation: Remove `ProxyTypePermission.PROXIES`, use explicit type allowlisting. Start with
+      `NoTypePermission.NONE`, add only required specific classes. Also, consider using safer alternatives like JSON,
+      Protocol Buffers (Protobuf), etc.
+      
+      If proxy deserialization is absolutely necessary: Use `SecurityFramework` with strict configuration, implement
+      thorough input validation, limit deserialization depth and implement timeout mechanisms.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    pattern: |
+      $XSTREAM.addPermission(ProxyTypePermission.PROXIES);
+  - id: int-xstream-bad-interface-perm
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      The usage of `InterfaceTypePermission.INTERFACES` allows deserialization 
+      of any interface type, which may introduce remote code execution (RCE) risks.
+      
+      Recommendation: Avoid using `InterfaceTypePermission.INTERFACES`, use `TypePermission` to allow specific types,
+      use `XStream.setupDefaultSecurity()` and implement strict input validation.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: "A8: Insecure Deserialization"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    patterns:
+      - pattern: $XSTREAM.addPermission(InterfaceTypePermission.INTERFACES);
+  - id: int-xstream-regexp-type-perm
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      Usage of `RegExpTypePermission` in XStream can introduce security risks by allowing types based on regular
+      expressions. This may unintentionally permit unsafe deserialization of arbitrary classes, leading to Remote Code
+      Execution (RCE) or other vulnerabilities. Prefer explicit allow-listing of safe types instead.
+    metadata:
+      category: security
+      cwe: "CWE-707: Improper Neutralization"
+      references:
+        - https://x-stream.github.io/security.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+    patterns:
+      - pattern-either:
+          - pattern: $XSTREAM.addPermission(new RegExpTypePermission(...))
+          - pattern: |
+              RegExpTypePermission $PERM = new RegExpTypePermission(...);
+              $XSTREAM.addPermission($PERM);
+    paths:
+      include:
+        - "*.java"

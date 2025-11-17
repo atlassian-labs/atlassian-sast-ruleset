@@ -1,0 +1,46 @@
+rules:
+  - id: int-spcore-insecure-editor
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      Spring DataBinder(s) should not be used for arbitrary and generic
+      types. Make sure the DataBinder(s) used for mapping incoming data in a
+      request is secure and does not serialize/deserialize objects of arbitrary
+      or unsafe types, which in this case is `$SERDE_TYPE`.
+    patterns:
+      - pattern-either:
+          - pattern: ($TYPE $VAR).registerCustomEditor($SERDE_TYPE, ...)
+      - pattern-inside: |-
+          @InitBinder
+          public void $METHOD($TYPE binder) {
+          ...
+          }
+      - metavariable-pattern:
+          metavariable: $TYPE
+          pattern-either:
+            - pattern: org.springframework.validation.DataBinder
+            - pattern: org.springframework.web.bind.WebDataBinder
+            - pattern: org.springframework.web.bind.ServletRequestDataBinder
+            - pattern: org.springframework.web.servlet.mvc.method.annotation.ExtendedServletRequestDataBinder
+            - pattern: org.springframework.web.bind.support.WebExchangeDataBinder
+            - pattern: org.springframework.web.reactive.result.method.annotation.ExtendedWebExchangeDataBinder
+            - pattern: org.springframework.web.bind.support.WebRequestDataBinder
+      - metavariable-pattern:
+          metavariable: $SERDE_TYPE
+          pattern-either:
+            - pattern: Class.class
+            - pattern: Object.class
+            - pattern: Serializable.class
+            - pattern: File.class
+    metadata:
+      cwe:
+        - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      confidence: HIGH
+      likelihood: HIGH
+      impact: HIGH
+      references:
+        - https://docs.spring.io/spring-framework/reference/web/webflux/controller/ann-initbinder.html
+    paths:
+      include:
+        - "*.java"

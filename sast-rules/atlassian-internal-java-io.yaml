@@ -1,0 +1,128 @@
+rules:
+  - id: int-java-io-serde
+    languages: [ java ]
+    message: >
+      Insecure deserialization detected: The use of `ObjectInputStream.readObject()` poses significant security risks,
+      especially when handling untrusted data. This method can be exploited to execute arbitrary code, potentially
+      leading to Remote Code Execution (RCE). To safeguard your application, avoid deserializing untrusted or
+      potentially malicious input and consider using safer alternatives or implementing strict validation mechanisms.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+        - https://docs.oracle.com/en/java/javase/21/core/addressing-serialization-vulnerabilities.html
+    severity: ERROR
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: new ObjectInputStream($REQ.getInputStream())
+          - pattern: new ObjectInputStream(new FileInputStream(...))
+          - pattern: new ObjectInputStream(new ByteArrayInputStream(...))
+          - pattern: new ObjectInputStream($SOCKET.getInputStream())
+          - pattern: new ObjectInputStream($BLOB.getBinaryStream())
+          - pattern: new ObjectInputStream(new BufferedInputStream(...))
+          - pattern: new ObjectInputStream(new ZipInputStream(...))
+          - pattern: new ObjectInputStream(new GZIPInputStream(...))
+          - pattern: new ObjectInputStream(new PipedInputStream(...))
+    pattern-sinks:
+      - pattern: $OBJ.readObject()
+    focus-metavariable: $OBJ
+  - id: int-java-io-ext-serde
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      This code contains an insecure deserialization issue. The `readExternal()` method is used to directly deserialize
+      data from an external source without performing proper validation or checks. This can allow untrusted or malicious
+      data to be processed, potentially leading to security vulnerabilities such as code execution, data tampering 
+      or application compromise. Always validate and sanitize external data before deserialization to ensure the
+      integrity and security of your application.
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      references:
+        - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+        - https://docs.oracle.com/en/java/javase/21/core/addressing-serialization-vulnerabilities.html
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              class $CLASS implements Externalizable {
+                ...
+                public void readExternal(ObjectInput $PARAM) throws IOException, ClassNotFoundException {
+                  ...
+                }
+                ...
+              }
+              ...
+          - pattern: $OBJ = $PARAM.readObject()
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $OBJ.getClass().newInstance()
+          - pattern: Class.forName(...).newInstance()
+          - pattern: $TYPE.cast($OBJ)
+  - id: int-java-io-arbitrary-read
+    languages: [ java ]
+    message: >
+      This code may contain a potential Arbitrary File Read vulnerability, where user-controlled input is used to
+      construct a file path. If this input is not properly validated or sanitized, attackers could manipulate it to
+      access sensitive or unauthorized files on the server, such as configuration files, credentials or system logs.
+      This type of vulnerability is particularly dangerous because it can expose critical information that may be
+      leveraged for further attacks, compromise the confidentiality of the system and lead to significant security
+      breaches.
+    severity: WARNING
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    metadata:
+      category: security
+      cwe: "CWE-73: External Control of File Name or Path"
+      references:
+        - https://cwe.mitre.org/data/definitions/73.html
+        - https://owasp.org/www-community/attacks/Path_Traversal
+        - https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getQueryString()
+    pattern-sinks:
+      - pattern-either:
+          - pattern: new FileReader($VAR)
+          - pattern: new FileInputStream($VAR)
+          - pattern: new RandomAccessFile($VAR, ...)
+    pattern-sanitizers:
+      - patterns:
+          - pattern-either:
+              - pattern: $VAR.replaceAll("\\.\\./", "")
+              - pattern: new File($BASE_DIR, $VAR)
+  - id: int-java-io-arbitrary-write
+    languages: [ java ]
+    message: >
+      Arbitrary File Write (AFW) vulnerability detected – The code is using user-controlled input to construct a file
+      path, which is then written to using classes like `FileWriter`, `FileOutputStream` or `RandomAccessFile`. This
+      practice is dangerous because it can allow attackers to manipulate the file path, potentially leading to path
+      traversal attacks or unauthorized modification of sensitive files. Always validate and sanitize user inputs to
+      prevent exploitation.
+    metadata:
+      category: security
+      cwe: "CWE-73: External Control of File Name or Path"
+      references:
+        - https://cwe.mitre.org/data/definitions/73.html
+        - https://owasp.org/www-community/attacks/Path_Traversal
+        - https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+    severity: WARNING
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getQueryString()
+    pattern-sinks:
+      - pattern-either:
+          - pattern: new FileWriter($VAR)
+          - pattern: new FileOutputStream($VAR)
+          - pattern: new RandomAccessFile($VAR, "rw")
+    focus-metavariable: $VAR

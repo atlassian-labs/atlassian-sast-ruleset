@@ -1,0 +1,50 @@
+rules:
+  - id: int-jmx-insecure-props
+    languages: [ java ]
+    message: >
+      This code uses an insecure JMX (Java Management Extensions) configuration. Remote JMX access has been enabled
+      without implementing authentication or SSL encryption. This lack of security measures exposes the application to
+      potential unauthorized access and malicious attacks, putting sensitive data and system integrity at risk. It is
+      essential to secure JMX connections by enforcing authentication and encrypting communication with SSL to protect
+      against these vulnerabilities.
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-306: Missing Authentication for Critical Function"
+      references:
+        - https://blog.pentesteracademy.com/java-jmx-server-insecure-configuration-java-code-execution-295421a452f7
+        - https://download.oracle.com/sunalerts/1019373.1.html
+        - https://support.alertlogic.com/hc/en-us/articles/115005320166-Java-JMX-Server-Insecure-Configuration-RCE
+    patterns:
+      - pattern-either:
+          - pattern: "System.setProperty(\"com.sun.management.jmxremote.authenticate\", \"false\")"
+          - pattern: "System.setProperty(\"com.sun.management.jmxremote.ssl\", \"false\")"
+      - pattern-not: "System.setProperty(\"com.sun.management.jmxremote.authenticate\", \"true\")"
+      - pattern-not: "System.setProperty(\"com.sun.management.jmxremote.ssl\", \"true\")"
+    fix: |
+      Ensure that JMX remote connections are properly secured by enabling authentication and SSL.
+  - id: int-jmx-insecure-binding
+    languages:
+      - java
+    severity: ERROR
+    message: >
+      Insecure JMX network binding detected: The Java Management Extensions (JMX) service is currently configured to
+      bind to all network interfaces (0.0.0.0). This means the service is accessible from any network, potentially
+      exposing sensitive application management operations to unauthorized users. Such a configuration significantly
+      increases the risk of exploitation, including unauthorized access, data breaches and remote attacks. To mitigate
+      this risk, it is strongly recommended to restrict JMX binding to specific, trusted network interfaces or
+      localhost (127.0.0.1). Additionally, ensure that proper authentication, authorization and encryption mechanisms
+      are in place to safeguard the JMX service.
+    fix: |
+      Use a secure host binding by restricting JMX access to localhost.
+    metadata:
+      category: security
+      cwe: "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      references:
+        - https://blog.pentesteracademy.com/java-jmx-server-insecure-configuration-java-code-execution-295421a452f7
+        - https://download.oracle.com/sunalerts/1019373.1.html
+        - https://support.alertlogic.com/hc/en-us/articles/115005320166-Java-JMX-Server-Insecure-Configuration-RCE
+    patterns:
+      - pattern: System.setProperty("com.sun.management.jmxremote.host", "0.0.0.0")
+      - pattern-not: System.setProperty("com.sun.management.jmxremote.host", "127.0.0.1")
+      - pattern-not: System.setProperty("com.sun.management.jmxremote.host", "localhost")

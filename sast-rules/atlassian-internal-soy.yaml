@@ -1,0 +1,21 @@
+rules:
+  - id: int-soy-html-noautoescape
+    languages: [ generic ]
+    severity: ERROR
+    message: >
+      The `noAutoescape` directive is being used within a Soy template that is explicitly defined with `kind="html"`.
+      Soy templates with kind="html" are designed to generate HTML content and by default, they automatically escape
+      any dynamic values to prevent unsafe HTML injection. However, using `noAutoescape` overrides this behavior,
+      disabling the automatic escaping mechanism. This can inadvertently expose the application to security
+      vulnerabilities such as cross-site scripting (XSS) attacks, where malicious actors could inject harmful scripts
+      into the generated HTML. To maintain robust security practices and ensure proper sanitization of dynamic content,
+      it is strongly recommended to avoid using `noAutoescape` in `kind="html"` templates and rely on Soy's built-in
+      escaping mechanisms
+    metadata:
+      category: security
+    patterns:
+      - pattern-inside: "{template ... kind=\"html\"} ... {/template}"
+      - pattern: "{$... |noAutoescape}"
+    paths:
+      include:
+        - "*.soy"

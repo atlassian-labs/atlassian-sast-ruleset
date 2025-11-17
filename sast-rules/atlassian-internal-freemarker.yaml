@@ -1,0 +1,106 @@
+rules:
+  - id: int-freemarker-tmpl-loading
+    languages: [ java ]
+    severity: ERROR
+    message: >
+      This FreeMarker code may be vulnerable to a Server-Side Template Injection (SSTI) attack due to the use of
+      unsanitized input in the template name. An attacker could exploit this to execute malicious code on the server.
+      To mitigate this risk, ensure that all template names are validated against a strict allow-list of approved values.
+      Additionally, configure the `TemplateClassResolver` to restrict access to potentially unsafe classes and resources,
+      providing an extra layer of security.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://ackcent.com/in-depth-freemarker-template-injection/
+        - https://freemarker.apache.org/docs/pgui_config_templateloading.html
+        - https://www.synack.com/blog/exploits-explained-discovering-a-server-side-template-injection-vuln-in-freemarker/
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getQueryString()
+          - pattern: $REQ.getAttribute(...)
+          - pattern: $REQ.getPart(...)
+          - pattern: $REQ.getPathInfo()
+          - pattern: $REQ.getServletPath()
+          - pattern: |
+              @RequestParam(...) String $VAR
+    pattern-sinks:
+      - pattern-either:
+          - pattern: (Configuration $CFG).getTemplate($VAR, ...)
+          - pattern: (Configuration $CFG).getTemplate($VAR)
+    paths:
+      include:
+        - "*.java"
+  - id: int-freemarker-dyn-tmpl
+    languages: [ java ]
+    severity: WARNING
+    message: >
+      The FreeMarker function `putTemplate()` is receiving input that originates from user-controlled sources. This can
+      introduce a security risk known as Server-Side Template Injection (SSTI), where attackers may exploit the template
+      engine to execute malicious code or access sensitive data. Ensure that all user inputs are properly validated,
+      sanitized or escaped before being passed to the template engine to prevent such vulnerabilities.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+      owasp: "A03:2021 - Injection"
+      references:
+        - https://ackcent.com/in-depth-freemarker-template-injection/
+        - https://freemarker.apache.org/docs/pgui_config_templateloading.html
+        - https://www.synack.com/blog/exploits-explained-discovering-a-server-side-template-injection-vuln-in-freemarker/
+    mode: taint
+    options:
+      taint_unify_mvars: true
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.queryParams(...)
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getQueryString()
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getCookies()
+          - pattern: $REQ.getSession()
+          - pattern: $REQ.getAttribute(...)
+          - pattern: $REQ.getPart(...)
+          - pattern: $REQ.getPathInfo()
+          - pattern: $REQ.getServletPath()
+          - pattern: |
+              @RequestParam(...) String $VAR
+    pattern-sinks:
+      - pattern-either:
+          # https://freemarker.apache.org/docs/api/freemarker/cache/StringTemplateLoader.html
+          - patterns:
+              - pattern: (StringTemplateLoader $LOADER).putTemplate($NAME, $CONTENT)
+              - pattern-not: (StringTemplateLoader $LOADER).putTemplate("...", ...)
+          # https://freemarker.apache.org/docs/api/freemarker/cache/TemplateLoader.html
+          - patterns:
+              - pattern: (TemplateLoader $LOADER).putTemplate($NAME, $CONTENT)
+              - pattern-not: (TemplateLoader $LOADER).putTemplate("...", ...)
+          # https://freemarker.apache.org/docs/api/freemarker/cache/FileTemplateLoader.html
+          - patterns:
+              - pattern: (FileTemplateLoader $LOADER).putTemplate($NAME, $CONTENT)
+              - pattern-not: (FileTemplateLoader $LOADER).putTemplate("...", ...)
+          # https://freemarker.apache.org/docs/api/freemarker/cache/ClassTemplateLoader.html
+          - patterns:
+              - pattern: (ClassTemplateLoader $LOADER).putTemplate($NAME, $CONTENT)
+              - pattern-not: (ClassTemplateLoader $LOADER).putTemplate("...", ...)
+          # https://freemarker.apache.org/docs/api/freemarker/cache/WebappTemplateLoader.html
+          - patterns:
+              - pattern: (WebappTemplateLoader $LOADER).putTemplate($NAME, $CONTENT)
+              - pattern-not: (WebappTemplateLoader $LOADER).putTemplate("...", ...)
+          # https://freemarker.apache.org/docs/api/freemarker/cache/MruCacheStorage.html
+          - pattern: (MruCacheStorage $STORAGE).put($NAME, $CONTENT)
+    pattern-sanitizers:
+      - patterns:
+          - pattern-either:
+              - pattern: if (Arrays.asList(...).contains($NAME)) { ... }
+              - pattern: if ($ALLOWED_TEMPLATES.contains($NAME)) { ... }
+          - focus-metavariable: $NAME
+        by-side-effect: true
+    paths:
+      include:
+        - "*.java"

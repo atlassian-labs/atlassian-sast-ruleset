@@ -1,0 +1,150 @@
+rules:
+  - id: int-jackson-polymorphic-serde
+    languages:
+      - java
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: >
+                      @JsonTypeInfo(use =
+                      com.fasterxml.jackson.annotation.JsonTypeInfo.Id.CLASS,...)
+                        $TYPE $VAR;
+                  - pattern: >
+                      @JsonTypeInfo(use =
+                      com.fasterxml.jackson.annotation.JsonTypeInfo.Id.MINIMAL_CLASS,...)
+
+                      $TYPE $VAR;
+              - metavariable-regex:
+                  metavariable: $TYPE
+                  regex: (Object|Serializable|Comparable|Cloneable|Closeable|AutoCloseable|Handler|Referenceable|DataSource)
+          - pattern: >
+              (com.fasterxml.jackson.databind.ObjectMapper
+              $OM).enableDefaultTyping(...);
+          - patterns:
+              - pattern: (com.fasterxml.jackson.databind.ObjectMapper
+                  $OM).activateDefaultTyping($B.builder(...). ...
+                  .allowIfBaseType($TYPE.class). ... );
+              - metavariable-regex:
+                  metavariable: $TYPE
+                  regex: (Object|Serializable|Comparable|Cloneable|Closeable|AutoCloseable|Handler|Referenceable|DataSource)
+          - pattern: (com.fasterxml.jackson.databind.ObjectMapper
+              $OM).activateDefaultTyping((com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator
+              $LFSTV), ObjectMapper.DefaultTyping.EVERYTHING);
+      - pattern-not-inside: >
+          (com.fasterxml.jackson.databind.ObjectMapper
+          $OM).enable(MapperFeature.BLOCK_UNSAFE_POLYMORPHIC_BASE_TYPES); ...
+      - pattern-not-inside: >
+          JsonMapper.builder(...).enable(MapperFeature.BLOCK_UNSAFE_POLYMORPHIC_BASE_TYPES).build();
+          ...
+    message: >
+      Jackson deserialization vulnerability in Java arises when applications
+      using the Jackson library deserialize untrusted JSON data without proper safeguards,
+      potentially leading to severe security risks like remote code execution (RCE).
+
+      1. Avoid using polymorphic type handling and avoid deserializing user input.
+
+      2. Absolutely avoid using Unsafe Base Types for fields. Types considered unsafe
+
+
+      Base types include:    
+        * java.lang.Object    
+        * java.io.Closeable    
+        * java.io.Serializable
+        * java.lang.AutoCloseable    
+        * java.lang.Cloneable    
+        * java.util.logging.Handler
+        * javax.naming.Referenceable    
+        * javax.sql.DataSource  
+      List of types compiled from a set of all known deserialization "gadgets", types they implement.
+
+
+      3. For explicit per-type/per-property polymorphic handling (@JsonTypeInfo), don’t use:    
+
+      * `@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS)` annotation
+
+      * `@JsonTypeInfo(use = JsonTypeInfo.Id.MINIMAL_CLASS)` annotation
+
+      Instead use:    
+
+      * `@JsonTypeInfo(use = JsonTypeInfo.Id.NAME)` annotation where possible.
+
+      4. Use Safe Default Typing feature properly. Don’t use the deprecated ‘enableDefaultTyping()’.
+
+      * Use Type Validators properly.   
+
+      * Don’t explicitly allow unsafe base types
+
+      5. Avoid using `com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator`
+
+      * Does not do any validation, allows all subtypes. Only used for backwards-compatibility. Users should usually
+      NOT use such a permissive implementation but use allow-list/criteria - based implementation.    
+
+      6. Use MapperFeature.BLOCK_UNSAFE_POLYMORPHIC_BASE_TYPES where possible.
+
+      7. Regularly update to the latest version of Jackson library.
+    metadata:
+      shortDescription: Java Unsafe Jackson Deserialization
+      references:
+        - https://cowtowncoder.medium.com/jackson-2-10-safe-default-typing-2d018f0ce2ba
+        - https://cowtowncoder.medium.com/on-jackson-cves-dont-panic-here-is-what-you-need-to-know-54cd0d6e8062
+        - https://www.github.com/mbechler/marshalsec/blob/master/marshalsec.pdf?raw=true
+        - https://github.com/FasterXML/jackson-databind/issues/2587
+        - https://cowtowncoder.medium.com/jackson-2-11-features-40cdc1d2bdf3
+        - https://fasterxml.github.io/jackson-databind/javadoc/2.11/com/fasterxml/jackson/databind/jsontype/impl/LaissezFaireSubTypeValidator.html
+      category: security
+      cwe: CWE-502
+      technology:
+        - jackson
+      security-severity: MEDIUM
+      impact: HIGH
+      confidence: HIGH
+      likelihood: MEDIUM
+  - id: int-jackson-xxe-dtd
+    languages:
+      - java
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: ($TYPE $X). ... .setProperty(XMLInputFactory.SUPPORT_DTD, true);
+          - pattern: ($TYPE $X). ... .setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, true);
+      - metavariable-pattern:
+          metavariable: $TYPE
+          pattern: XmlMapper
+    message: >
+      1. When using Jackson with `jackson-dataformat-xml`, enabling XML external entities (XXE) can lead to XXE attacks, allowing attackers to read files or perform network requests.
+      
+      2. Example of bad code
+      {code:java}
+      XmlMapper xmlMapper = new XmlMapper();
+      MyObject obj = xmlMapper.readValue(untrustedXml, MyObject.class);
+      {code}
+      
+      3. Mitigation steps
+      {code:java}
+      XmlMapper xmlMapper = new XmlMapper();
+      xmlMapper.getFactory().getXMLInputFactory().setProperty(XMLInputFactory.SUPPORT_DTD, false);
+      xmlMapper.getFactory().getXMLInputFactory().setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+      {code}
+
+      4. Use built-in Java XML security features with proper configuration or consider more actively maintained
+      libraries like `woodstox-core` (which Jackson XML actually uses), Apache Santuario XML Security for Java or JAXP
+      (Java API for XML Processing) with proper security settings
+    metadata:
+      shortDescription: Java Jackson Unsafe XML Deserialization
+      references:
+        - https://cowtowncoder.medium.com/jackson-2-10-safe-default-typing-2d018f0ce2ba
+        - https://cowtowncoder.medium.com/on-jackson-cves-dont-panic-here-is-what-you-need-to-know-54cd0d6e8062
+        - https://www.github.com/mbechler/marshalsec/blob/master/marshalsec.pdf?raw=true
+        - https://github.com/FasterXML/jackson-databind/issues/2587
+        - https://cowtowncoder.medium.com/jackson-2-11-features-40cdc1d2bdf3
+        - https://fasterxml.github.io/jackson-databind/javadoc/2.11/com/fasterxml/jackson/databind/jsontype/impl/LaissezFaireSubTypeValidator.html
+      category: security
+      cwe: CWE-502
+      technology:
+        - jackson
+      security-severity: MEDIUM
+      impact: HIGH
+      confidence: HIGH
+      likelihood: MEDIUM
